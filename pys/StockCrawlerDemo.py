@@ -13,9 +13,17 @@ import os
 import sys
 import matplotlib.pyplot as plt
 import numpy as np
+import time
+
+from dateutil import parser
+
 
 URL = 'http://quote.eastmoney.com/stocklist.html'
-DataDir = './../data/'
+DataDir = './../data/crawl/'
+DefaultCrawlMode = 'INC'
+DefaultStartDate = '20170101'
+DBName = 'stock'
+DBCon = None
 
 def getHtml(url):
     html = urllib.request.urlopen(url).read()
@@ -27,6 +35,22 @@ def getStockCode(html):
     pat = re.compile(s)
     code = pat.findall(html)
     return code
+
+def initDBCon():
+    ip = 'localhost'
+    usr = 'root'
+    pwd = 'xxh@WE10018164'
+    charset = 'utf8'
+    
+    global DBCon
+    DBCon = pymysql.connect(ip, usr, pwd, charset = charset)
+
+def closeDBCon():
+    if DBCon != None:
+        try:
+            DBCon.close()
+        except:
+            print('数据库关闭失败')
 
 def describeStock(code):
     data = pd.read_csv(DataDir + code + '.csv', encoding = 'gbk')
@@ -51,44 +75,18 @@ def describeStock(code):
     rolling_mean = close.rolling(window = ma).mean()
     plt.plot(date, rolling_mean)
 
-def crawl():
-    crawledCodes = getStockCode(getHtml(URL))
-    stockCodeList = []
-    
-    for code in crawledCodes:
-        stockCodeList.append(code)
-    
-    stockCodeList = stockCodeList[1000:1001]
-    
-    for code in stockCodeList:
-        print('正在获取股票[%s]数据...' % code)
-        url = 'http://quotes.money.163.com/service/chddata.html?code=0' + code + \
-        '&end=20180126&fields=TCLOSE;HIGH;LOW;TOPEN;LCLOSE;CHG;PCHG;TURNOVER;VOTURNOVER;VATURNOVER;TCAP;MCAP'
-        urllib.request.urlretrieve(url, DataDir + code + '.csv')
+
 
 def store2DB():
-    ip = 'localhost'
-    usr = 'root'
-    pwd = 'xxh@WE10018164'
-    charset = 'utf8'
-    db = 'stock'
-    
-    db = pymysql.connect(ip, usr, pwd, charset = charset)
-    cursor = db.cursor()
-    cursor.execute("DROP DATABASE stock;")
-    cursor.execute("CREATE DATABASE stock;")
-    cursor.execute("USE stock;")
+    if DBCon == None:
+        initDBCon()
+    cursor = DBCon.cursor()
+    sql = "USE " + DBName
+    cursor.execute(sql)
     
     files = os.listdir(DataDir)
     for file in files:
         data = pd.read_csv(DataDir + file, encoding = 'gbk')
-        sql = "create table stock_%s" % file[0:6] + "(data_date date, stock_code VARCHAR(10), " + "ch_name VARCHAR(10),\
-                       close float, high float, low float, open float, last_open float, profit float, \
-                       profit_ratio float, exchange float, dill bigint, dill_amount bigint, market_value bigint, currency_market_value bigint)"
-        try:
-            cursor.execute(sql)
-        except:
-            print('数据表已存在！')
         
         print('正在存储stock_%s'% file[0:6])
         length = len(data)
@@ -96,7 +94,7 @@ def store2DB():
             record = tuple(data.loc[i])
             #插入数据语句
             try:
-                sql = "insert into stock_%s" % file[0:6] + "(data_date, stock_code, ch_name, close, high, low, open, last_open, profit, profit_ratio, exchange, \
+                sql = "INSERT INTO stock_price_data (data_date, stock_code, ch_name, close, high, low, open, last_open, profit, profit_ratio, exchange, \
                 dill, dill_amount, market_value, currency_market_value) values ('%s',%s','%s',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)" % record
                 #获取的表中数据很乱，包含缺失值、Nnone、none等，插入数据库需要处理成空值
                 sql = sql.replace('nan','null').replace('None','null').replace('none','null') 
@@ -107,14 +105,69 @@ def store2DB():
     
     #关闭游标，提交，关闭数据库连接
     cursor.close()
-    db.commit()
-    db.close()
+    DBCon.commit()
+    #con.close()
+
+
+def crawl(mode = DefaultCrawlMode):
+    files = os.listdir(DataDir)
+    for file in files:
+        os.remove(DataDir + file)
+    
+    crawledCodes = getStockCode(getHtml(URL))
+    stockCodeList = []
+    
+    for code in crawledCodes:
+        stockCodeList.append(code)
+    
+    stockCodeList = stockCodeList[1000:1010]
+    
+    currentDate = time.strftime('%Y%m%d', time.localtime(time.time()))
+    
+    if DBCon == None:
+        initDBCon()
+    
+    cursor = DBCon.cursor()
+    
+    if mode == 'ALL':
+        startDate = DefaultStartDate
+        sql = "DROP DATABASE IF EXISTS " + DBName
+        cursor.execute(sql)
+        sql = "CREATE DATABASE " + DBName
+        cursor.execute(sql)
+        sql = "USE " + DBName
+        cursor.execute(sql)
+        sql = "CREATE TABLE stock_price_data (data_date date, stock_code VARCHAR(10), ch_name VARCHAR(10),close float, high float, low float, open float, last_open float, profit float, profit_ratio float, exchange float, dill bigint, dill_amount bigint, market_value bigint, currency_market_value bigint, PRIMARY KEY (data_date, stock_code))"
+        cursor.execute(sql)
+    else:
+        sql = "USE " + DBName
+        cursor.execute(sql)
+        sql = "SELECT MAX(data_date) FROM stock_price_data"
+        cursor.execute(sql)
+        dt = cursor.fetchone()
+        startDate = dt[0].strftime('%Y%m%d')
+        if startDate >= currentDate:
+            return
+    
+    for code in stockCodeList:
+        print('正在获取股票[%s]数据...' % code)
+        url = 'http://quotes.money.163.com/service/chddata.html?code=0' + code + '&start=' + startDate + \
+        '&end=' + currentDate + '&fields=TCLOSE;HIGH;LOW;TOPEN;LCLOSE;CHG;PCHG;TURNOVER;VOTURNOVER;VATURNOVER;TCAP;MCAP'
+        urllib.request.urlretrieve(url, DataDir + code + '.csv')
+    
+    store2DB()
+
 
 
 if __name__ == '__main__':
-    toCrawl = False
+    toCrawl = True
+    crawlMode = 'INC'
+    
+    initDBCon()
+    
     if toCrawl:
-        crawl()
-        store2DB()
+        crawl(crawlMode)
     else:
         describeStock('600790')
+    
+    closeDBCon()
