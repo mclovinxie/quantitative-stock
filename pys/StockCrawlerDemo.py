@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-from dateutil import parser
+from datetime import datetime as dt
 
 
 URL = 'http://quote.eastmoney.com/stocklist.html'
@@ -46,35 +46,47 @@ def initDBCon():
     DBCon = pymysql.connect(ip, usr, pwd, charset = charset)
 
 def closeDBCon():
+    global DBCon
     if DBCon != None:
         try:
             DBCon.close()
         except:
             print('数据库关闭失败')
+    
+    DBCon = None
 
 def describeStock(code):
-    data = pd.read_csv(DataDir + code + '.csv', encoding = 'gbk')
+    #data = pd.read_csv(DataDir + code + '.csv', encoding = 'gbk')
+    if DBCon == None:
+        initDBCon()
+    sql = "SELECT * FROM %s.stock_price_data WHERE stock_code = '%s'" % (DBName, code)
+    data = pd.read_sql(sql, DBCon)
+    closeDBCon()
+   
     print(data.head(5))
     
-    data.sort_values('日期', inplace = True)
+    data.sort_values('data_date', inplace = True)
     
-    data = data[data['日期'] > '2017-10-01']
-    date = pd.Series([pd.to_datetime(str)] for str in data.日期)
-    data.index = date
+    #date = pd.Series([pd.to_datetime(str)] for str in data.data_date)
+    #data.index = date
+    data = data[data['data_date'] > dt.strptime('20170930', '%Y%m%d').date()]
     
-    open = data.开盘价
-    close = data.收盘价
-    low = data.最低价
-    high = data.最高价
+    open = data.open
+    close = data.close
+    low = data.low
+    high = data.high
     
-    plt.plot(date, low)
-    plt.plot(date, high)
+    #plt.plot(data.data_date, low)
+    #plt.plot(data.data_date, high)
     
-    ma = 30
+    ma = 10
     #rolling_mean = pd.rolling_mean(close, ma)
-    rolling_mean = close.rolling(window = ma).mean()
-    plt.plot(date, rolling_mean)
-
+    rolling_mean_10 = close.rolling(window = ma).mean()
+    plt.plot(data.data_date, rolling_mean_10)
+    
+    ma = 5
+    rolling_mean_5 = close.rolling(window = ma).mean()
+    plt.plot(data.data_date, rolling_mean_5)
 
 
 def store2DB():
@@ -156,18 +168,16 @@ def crawl(mode = DefaultCrawlMode):
         urllib.request.urlretrieve(url, DataDir + code + '.csv')
     
     store2DB()
+    
+    closeDBCon()
 
 
 
 if __name__ == '__main__':
-    toCrawl = True
+    toCrawl = False
     crawlMode = 'INC'
-    
-    initDBCon()
     
     if toCrawl:
         crawl(crawlMode)
     else:
-        describeStock('600790')
-    
-    closeDBCon()
+        describeStock('600789')
