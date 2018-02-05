@@ -14,6 +14,7 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+import datetime
 
 from datetime import datetime as dt
 
@@ -54,39 +55,6 @@ def closeDBCon():
             print('数据库关闭失败')
     
     DBCon = None
-
-def describeStock(code):
-    #data = pd.read_csv(DataDir + code + '.csv', encoding = 'gbk')
-    if DBCon == None:
-        initDBCon()
-    sql = "SELECT * FROM %s.stock_price_data WHERE stock_code = '%s'" % (DBName, code)
-    data = pd.read_sql(sql, DBCon)
-    closeDBCon()
-   
-    print(data.head(5))
-    
-    data.sort_values('data_date', inplace = True)
-    
-    #date = pd.Series([pd.to_datetime(str)] for str in data.data_date)
-    #data.index = date
-    data = data[data['data_date'] > dt.strptime('20170930', '%Y%m%d').date()]
-    
-    open = data.open
-    close = data.close
-    low = data.low
-    high = data.high
-    
-    #plt.plot(data.data_date, low)
-    #plt.plot(data.data_date, high)
-    
-    ma = 10
-    #rolling_mean = pd.rolling_mean(close, ma)
-    rolling_mean_10 = close.rolling(window = ma).mean()
-    plt.plot(data.data_date, rolling_mean_10)
-    
-    ma = 5
-    rolling_mean_5 = close.rolling(window = ma).mean()
-    plt.plot(data.data_date, rolling_mean_5)
 
 
 def store2DB():
@@ -132,7 +100,7 @@ def crawl(mode = DefaultCrawlMode):
     for code in crawledCodes:
         stockCodeList.append(code)
     
-    stockCodeList = stockCodeList[1000:1010]
+    #stockCodeList = stockCodeList[1000:1010]
     
     currentDate = time.strftime('%Y%m%d', time.localtime(time.time()))
     
@@ -149,7 +117,7 @@ def crawl(mode = DefaultCrawlMode):
         cursor.execute(sql)
         sql = "USE " + DBName
         cursor.execute(sql)
-        sql = "CREATE TABLE stock_price_data (data_date date, stock_code VARCHAR(10), ch_name VARCHAR(10),close float, high float, low float, open float, last_open float, profit float, profit_ratio float, exchange float, dill bigint, dill_amount bigint, market_value bigint, currency_market_value bigint, PRIMARY KEY (data_date, stock_code))"
+        sql = "CREATE TABLE stock_price_data (data_date date, stock_code VARCHAR(10), ch_name VARCHAR(10),close float, high float, low float, open float, last_open float, profit float, profit_ratio float, exchange float, dill bigint, dill_amount bigint, market_value bigint, currency_market_value bigint, PRIMARY KEY (data_date, stock_code), INDEX(data_date), INDEX(stock_code))"
         cursor.execute(sql)
     else:
         sql = "USE " + DBName
@@ -172,6 +140,42 @@ def crawl(mode = DefaultCrawlMode):
     closeDBCon()
 
 
+def describeStock(code):
+    #data = pd.read_csv(DataDir + code + '.csv', encoding = 'gbk')
+    if DBCon == None:
+        initDBCon()
+    sql = "SELECT * FROM %s.stock_price_data WHERE stock_code = '%s'" % (DBName, code)
+    data = pd.read_sql(sql, DBCon)
+    closeDBCon()
+   
+    data.sort_values('data_date', inplace = True)
+    
+    #date = pd.Series([pd.to_datetime(str)] for str in data.data_date)
+    #data.index = date
+    currentDate = dt.now()
+    delta = datetime.timedelta(days = -90)
+    nDays = currentDate + delta
+    data = data[data['data_date'] > dt.strptime(nDays.strftime('%Y%m%d'), '%Y%m%d').date()]
+    
+    print(data.head(5))
+    
+    open = data.open
+    close = data.close
+    low = data.low
+    high = data.high
+    
+    #plt.plot(data.data_date, low)
+    #plt.plot(data.data_date, high)
+    
+    ma = 10
+    #rolling_mean = pd.rolling_mean(close, ma)
+    rolling_mean_10 = close.rolling(window = ma).mean()
+    plt.plot(data.data_date, rolling_mean_10)
+    
+    ma = 5
+    rolling_mean_5 = close.rolling(window = ma).mean()
+    plt.plot(data.data_date, rolling_mean_5)
+
 
 if __name__ == '__main__':
     toCrawl = False
@@ -180,4 +184,4 @@ if __name__ == '__main__':
     if toCrawl:
         crawl(crawlMode)
     else:
-        describeStock('600789')
+        describeStock('601618')
