@@ -5,157 +5,36 @@ Created on Thu Jan 25 19:35:33 2018
 @author: xiexihao
 """
 
-import urllib
-import re
 import pandas as pd
-import pymysql
-import os
-import sys
 import matplotlib.pyplot as plt
-import numpy as np
-import time
 import datetime
 
-from datetime import datetime as dt
+from datetime import datetime as dttm
 
-
-URL = 'http://quote.eastmoney.com/stocklist.html'
-DataDir = './../data/crawl/'
-DefaultCrawlMode = 'INC'
-DefaultStartDate = '20170101'
-DBName = 'stock'
-DBCon = None
-
-def getHtml(url):
-    html = urllib.request.urlopen(url).read()
-    html = html.decode('gbk')
-    return html
-
-def getStockCode(html):
-    s = r'<li><a target="_blank" href="http://quote.eastmoney.com/\S\S(.*?).html">'
-    pat = re.compile(s)
-    code = pat.findall(html)
-    return code
-
-def initDBCon():
-    ip = 'localhost'
-    usr = 'root'
-    pwd = 'xxh@WE10018164'
-    charset = 'utf8'
-    
-    global DBCon
-    DBCon = pymysql.connect(ip, usr, pwd, charset = charset)
-
-def closeDBCon():
-    global DBCon
-    if DBCon != None:
-        try:
-            DBCon.close()
-        except:
-            print('数据库关闭失败')
-    
-    DBCon = None
-
-
-def store2DB():
-    if DBCon == None:
-        initDBCon()
-    cursor = DBCon.cursor()
-    sql = "USE " + DBName
-    cursor.execute(sql)
-    
-    files = os.listdir(DataDir)
-    for file in files:
-        data = pd.read_csv(DataDir + file, encoding = 'gbk')
-        
-        print('正在存储stock_%s'% file[0:6])
-        length = len(data)
-        for i in range(0, length):
-            record = tuple(data.loc[i])
-            #插入数据语句
-            try:
-                sql = "INSERT INTO stock_price_data (data_date, stock_code, ch_name, close, high, low, open, last_open, profit, profit_ratio, exchange, \
-                dill, dill_amount, market_value, currency_market_value) values ('%s',%s','%s',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)" % record
-                #获取的表中数据很乱，包含缺失值、Nnone、none等，插入数据库需要处理成空值
-                sql = sql.replace('nan','null').replace('None','null').replace('none','null') 
-                cursor.execute(sql)
-            except:
-                #如果以上插入过程出错，跳过这条数据记录，继续往下进行
-                break
-    
-    #关闭游标，提交，关闭数据库连接
-    cursor.close()
-    DBCon.commit()
-    #con.close()
-
-
-def crawl(mode = DefaultCrawlMode):
-    files = os.listdir(DataDir)
-    for file in files:
-        os.remove(DataDir + file)
-    
-    crawledCodes = getStockCode(getHtml(URL))
-    stockCodeList = []
-    
-    for code in crawledCodes:
-        stockCodeList.append(code)
-    
-    #stockCodeList = stockCodeList[1000:1010]
-    
-    currentDate = time.strftime('%Y%m%d', time.localtime(time.time()))
-    
-    if DBCon == None:
-        initDBCon()
-    
-    cursor = DBCon.cursor()
-    
-    if mode == 'ALL':
-        startDate = DefaultStartDate
-        sql = "DROP DATABASE IF EXISTS " + DBName
-        cursor.execute(sql)
-        sql = "CREATE DATABASE " + DBName
-        cursor.execute(sql)
-        sql = "USE " + DBName
-        cursor.execute(sql)
-        sql = "CREATE TABLE stock_price_data (data_date date, stock_code VARCHAR(10), ch_name VARCHAR(10),close float, high float, low float, open float, last_open float, profit float, profit_ratio float, exchange float, dill bigint, dill_amount bigint, market_value bigint, currency_market_value bigint, PRIMARY KEY (data_date, stock_code), INDEX(data_date), INDEX(stock_code))"
-        cursor.execute(sql)
-    else:
-        sql = "USE " + DBName
-        cursor.execute(sql)
-        sql = "SELECT MAX(data_date) FROM stock_price_data"
-        cursor.execute(sql)
-        dt = cursor.fetchone()
-        startDate = dt[0].strftime('%Y%m%d')
-        if startDate >= currentDate:
-            return
-    
-    for code in stockCodeList:
-        print('正在获取股票[%s]数据...' % code)
-        url = 'http://quotes.money.163.com/service/chddata.html?code=0' + code + '&start=' + startDate + \
-        '&end=' + currentDate + '&fields=TCLOSE;HIGH;LOW;TOPEN;LCLOSE;CHG;PCHG;TURNOVER;VOTURNOVER;VATURNOVER;TCAP;MCAP'
-        urllib.request.urlretrieve(url, DataDir + code + '.csv')
-    
-    store2DB()
-    
-    closeDBCon()
-
+import Crawler as crwl
+import CandleStick as cndl
+import DataReader as dr
 
 def describeStock(code):
     #data = pd.read_csv(DataDir + code + '.csv', encoding = 'gbk')
-    if DBCon == None:
-        initDBCon()
-    sql = "SELECT * FROM %s.stock_price_data WHERE stock_code = '%s'" % (DBName, code)
-    data = pd.read_sql(sql, DBCon)
-    closeDBCon()
+    #if dbu.DBCon == None:
+    #    dbu.initDBCon()
+    #sql = "SELECT * FROM %s.stock_price_data WHERE stock_code = '%s'" % (dbu.DBName, code)
+    #data = pd.read_sql(sql, dbu.DBCon)
+    #dbu.closeDBCon()
+    data = dr.readStockData(code, '2017-09-30', '2018-03-05')
    
     data.sort_values('data_date', inplace = True)
     
+    data.index = data.data_date
+    data.index = pd.to_datetime(data.index, format = '%Y-%m-%d')
+    
     #date = pd.Series([pd.to_datetime(str)] for str in data.data_date)
     #data.index = date
-    currentDate = dt.now()
+    currentDate = dttm.now()
     delta = datetime.timedelta(days = -90)
     nDays = currentDate + delta
-    data = data[data['data_date'] > dt.strptime(nDays.strftime('%Y%m%d'), '%Y%m%d').date()]
+    data = data[data['data_date'] > dttm.strptime(nDays.strftime('%Y%m%d'), '%Y%m%d').date()]
     
     print(data.head(5))
     
@@ -175,13 +54,16 @@ def describeStock(code):
     ma = 5
     rolling_mean_5 = close.rolling(window = ma).mean()
     plt.plot(data.data_date, rolling_mean_5)
+    
+    #cndl.candlePlot(data, title = 'K line')
+    cndl.drawCandle(data)
 
 
 if __name__ == '__main__':
-    toCrawl = False
+    toCrawl = True
     crawlMode = 'INC'
     
     if toCrawl:
-        crawl(crawlMode)
+        crwl.crawl(crawlMode)
     else:
-        describeStock('601618')
+        describeStock('600313')
