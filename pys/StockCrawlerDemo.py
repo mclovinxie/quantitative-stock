@@ -66,4 +66,6 @@ if __name__ == '__main__':
     if toCrawl:
         crwl.crawl(crawlMode)
     else:
-        describeStock('600313')
+        #describeStock('600313')
+        tmpdata = dr.justTry()
+        print(tmpdata)
