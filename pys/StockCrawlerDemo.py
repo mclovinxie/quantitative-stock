@@ -57,7 +57,8 @@ def describeStock(code):
     plt.plot(data.data_date, rolling_mean_5)
     
     #cndl.candlePlot(data, title = 'K line')
-    cndl.drawCandle(data)
+    #cndl.drawCandle(data)
+    
 
 
 if __name__ == '__main__':
@@ -69,5 +70,5 @@ if __name__ == '__main__':
     else:
         #describeStock('600313')
         trydate = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-        tmpdata = dr.justTry('2018-03-23')
+        tmpdata = dr.justTry('2018-03-28', 4)
         print(tmpdata)

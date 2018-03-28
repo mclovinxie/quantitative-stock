@@ -27,49 +27,71 @@ def readStockData(stockcode, sday, eday):
     return stockdata
 
 
-def justTry(dateStr):
+def justTry(dateStr, dayCount):
     if dbu.DBCon == None:
         dbu.initDBCon()
     
     sql = '''
         SELECT
-        	a.stock_code
-        	, a.ch_name
-        	-- , e.data_date
-        	, e.profit_ratio
-        	-- , d.data_date
-        	, d.profit_ratio
-        	-- , c.data_date
-        	, c.profit_ratio
-        	-- , b.data_date
-        	, b.profit_ratio
-        	-- , a.data_date
-        	, a.profit_ratio
-        FROM stock.stock_price_data a
+            b.data_date AS data_date    
+            , b.stock_code AS stock_code
+            , b.ch_name AS ch_name
+            , b.last_open AS last_open
+            , b.open AS open
+            , b.close AS close
+            , b.low AS low
+            , b.high AS high
+            , b.profit AS profit
+            , b.profit_ratio AS profit_ratio
+        FROM (
+            SELECT
+               a.stock_code AS stock_code
+               , MAX(data_date) AS data_date
+            FROM (
+                SELECT
+                    a.stock_code AS stock_code
+                    , a.data_date AS data_date
+                    , a.profit_ratio AS profit_ratio
+                    , @rownum := @rownum + 1
+                    , CASE
+                        WHEN @pstock = a.stock_code THEN @rank := @rank + 1
+                        ELSE @rank := 1
+                      END AS rank
+                    , @pstock := a.stock_code
+                FROM (
+                    SELECT
+                        a.stock_code AS stock_code
+                        , a.data_date AS data_date
+                        , a.profit_ratio AS profit_ratio
+                    FROM stock.stock_price_data a
+                    INNER JOIN (
+                        SELECT
+                            @rownum := 0
+                            , @pstock := NULL
+                            , @rank := 0
+                    ) b ON
+                        1 = 1
+                    WHERE
+                        a.data_date <= '%s'
+                        AND SUBSTR(a.stock_code, 1, 3) <> '000'
+                    ORDER BY
+                        a.stock_code ASC
+                        , a.data_date DESC
+                ) a
+            ) a
+            WHERE
+                a.rank <= %d
+            GROUP BY
+                a.stock_code
+            HAVING
+                MIN(a.profit_ratio) >= 0
+        ) a
         INNER JOIN stock.stock_price_data b ON
-        	b.stock_code = a.stock_code
-        	AND b.data_date = DATE_ADD(a.data_date, INTERVAL -1 DAY)
-        	AND b.profit_ratio >= 0
-        INNER JOIN stock.stock_price_data c ON
-        	c.stock_code = b.stock_code
-        	AND c.data_date = DATE_ADD(b.data_date, INTERVAL -1 DAY)
-        	AND c.profit_ratio >= 0
-        INNER JOIN stock.stock_price_data d ON
-        	d.stock_code = c.stock_code
-        	AND d.data_date = DATE_ADD(c.data_date, INTERVAL -1 DAY)
-        	AND d.profit_ratio >= 0
-        INNER JOIN stock.stock_price_data e ON
-        	e.stock_code = d.stock_code
-        	AND e.data_date = DATE_ADD(d.data_date, INTERVAL -1 DAY)
-        	AND e.profit_ratio >= 0
-        WHERE
-        	a.data_date = '%s'
-        	AND a.profit_ratio >= 0
-        	AND SUBSTR(a.stock_code, 1, 3) <> '000'
-        ORDER BY
-        	a.stock_code
+            b.stock_code = a.stock_code
+            AND b.data_date = a.data_date
+            AND b.open > 0
         ;
-    ''' % (dateStr)
+    ''' % (dateStr, dayCount)
     stockdata = pd.DataFrame()
     rawdata = pd.read_sql(sql, dbu.DBCon)
     stockdata = pd.concat([rawdata, stockdata])
