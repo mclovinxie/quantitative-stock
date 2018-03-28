@@ -8,6 +8,7 @@ Created on Thu Jan 25 19:35:33 2018
 import pandas as pd
 import matplotlib.pyplot as plt
 import datetime
+import time
 
 from datetime import datetime as dttm
 
@@ -60,12 +61,13 @@ def describeStock(code):
 
 
 if __name__ == '__main__':
-    toCrawl = True
+    toCrawl = False
     crawlMode = 'INC'
     
     if toCrawl:
         crwl.crawl(crawlMode)
     else:
         #describeStock('600313')
-        tmpdata = dr.justTry()
+        trydate = time.strftime('%Y-%m-%d', time.localtime(time.time()))
+        tmpdata = dr.justTry('2018-03-23')
         print(tmpdata)

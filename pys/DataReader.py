@@ -27,7 +27,7 @@ def readStockData(stockcode, sday, eday):
     return stockdata
 
 
-def justTry():
+def justTry(dateStr):
     if dbu.DBCon == None:
         dbu.initDBCon()
     
@@ -63,13 +63,13 @@ def justTry():
         	AND e.data_date = DATE_ADD(d.data_date, INTERVAL -1 DAY)
         	AND e.profit_ratio >= 0
         WHERE
-        	a.data_date = '2018-03-23'
+        	a.data_date = '%s'
         	AND a.profit_ratio >= 0
-        	AND a.stock_code NOT LIKE '000%'
+        	AND SUBSTR(a.stock_code, 1, 3) <> '000'
         ORDER BY
         	a.stock_code
         ;
-    '''
+    ''' % (dateStr)
     stockdata = pd.DataFrame()
     rawdata = pd.read_sql(sql, dbu.DBCon)
     stockdata = pd.concat([rawdata, stockdata])
