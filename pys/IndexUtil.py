@@ -69,13 +69,13 @@ def getMACD(code):
     plt.subplot(212)
     plt.bar(left=macd.index,\
             height=macd,\
-            label='macd',color='r')
+            label='MACD',color='r')
     plt.legend()
     
     macddata=pd.DataFrame()
-    macddata['DIF']= dif
-    macddata['DEA']= dea
-    macddata['MACD']= macd
+    macddata['dif']= dif
+    macddata['dea']= dea
+    macddata['macd']= macd
 
 if __name__ == '__main__':
     getMACD('603118')
